@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+#
+# This is a Git post-receive hook script that assumes that the current repository
+# is getting sent changesets for review. This script does the job of taking those
+# changesets and sending them to ta Review Board instance for review.
+
+import os
+
+import ConfigParser from ConfigParser
+
+CONFIG_FILE = 'config.cfg'
+
+def main():
+    # We'll start by reading in the configuration for this hook...
+    config = ConfigParser()
+    config.readfp(open(CONFIG_FILE))
+    REVIEWBOARD_URL = config.get('RB', 'url')
+    USERNAME = config.get('RB', 'username')
+    PASSWORD = config.get('RB', 'password')
+
+    # Next, we need to parse name of the branch that just came in.
+
+if __name__ == '__main__':
+    main()
