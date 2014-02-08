@@ -16,8 +16,32 @@ CONFIG_FILE = 'config.cfg'
 
 def execute(command):
     """Executes the specified command and returns the stdout output."""
+    if isinstance(command, list):
+        subprocess.list2cmdline(command)
+
     process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
     return process.communicate()[0].strip()
+
+def generate_diff(base_ref, tip_ref):
+    """Performs a diff on a particular ref range."""
+    if base_ref == tip_ref:
+        rev_range = "%s..%s^" % (base_ref, tip_ref)
+    else:
+        rev_range = "%s..%s" % (base_ref, tip_ref)
+
+    cmdline = [
+        "git",
+        "diff",
+        "--no-color",
+        "--full-index",
+        "--no-ext-diff",
+        "--ignore-submodules",
+        "--no-renames",
+        "-M",
+        rev_range
+    ]
+
+    return execute(cmdline)
 
 def main():
     # We'll start by reading in the configuration for this hook...
