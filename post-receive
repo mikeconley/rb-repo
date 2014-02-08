@@ -22,6 +22,7 @@ def execute(command):
     process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
     return process.communicate()[0].strip()
 
+
 def generate_diff(base_ref, tip_ref):
     """Performs a diff on a particular ref range."""
     if base_ref == tip_ref:
@@ -43,6 +44,12 @@ def generate_diff(base_ref, tip_ref):
 
     return execute(cmdline)
 
+
+def get_original_branch():
+    """Finds the original branch this review request change was based on."""
+    pass
+
+
 def main():
     # We'll start by reading in the configuration for this hook...
     config = ConfigParser()
@@ -58,10 +65,17 @@ def main():
     # For example:
     #  aa453216d1b3e49e7f6f98441fa56946ddcd6a20 68f7abf4e6f922807889f52bc043ecd31b79f814 refs/heads/master
     #
-    # We need all three, so let's extract those.
-    OLD_SHA = sys.argv[1]
-    NEW_SHA = sys.argv[2]
-    NEW_REF = sys.argv[3]
+    # We need all three, so let's extract those. We might be getting several of
+    # these changesets as well, so we have to iterate the stdin lines.
+    changesets = []
+
+    for line in sys.stdin:
+        args = line.strip().split(' ')
+        changeset = {}
+        changeset['oldrev'] = args[0]
+        changeset['newrev'] = args[1]
+        changeset['ref'] = args[2]
+        changesets.append(changeset)
 
 
 if __name__ == '__main__':
