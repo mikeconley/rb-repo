@@ -5,10 +5,18 @@
 # changesets and sending them to ta Review Board instance for review.
 
 import os
+import re
+import subprocess
 
-import ConfigParser from ConfigParser
+from ConfigParser import ConfigParser
 
 CONFIG_FILE = 'config.cfg'
+
+
+def execute(command):
+    """Executes the specified command and returns the stdout output."""
+    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+    return process.communicate()[0].strip()
 
 def main():
     # We'll start by reading in the configuration for this hook...
