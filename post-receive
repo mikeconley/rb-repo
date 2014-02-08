@@ -11,6 +11,9 @@ import sys
 
 from ConfigParser import ConfigParser
 
+from rbtools.api.clients import RBClient
+
+
 CONFIG_FILE = 'config.cfg'
 
 
@@ -50,6 +53,14 @@ def get_original_branch():
     pass
 
 
+def get_api(self, server_url, username, password):
+    """Returns an RBClient instance and the associated root resource."""
+    api_client = RBClient(server_url, username=username, password=password)
+    api_root = api_client.get_root()
+
+    return api_client, api_root
+
+
 def main():
     # We'll start by reading in the configuration for this hook...
     config = ConfigParser()
@@ -76,6 +87,9 @@ def main():
         changeset['newrev'] = args[1]
         changeset['ref'] = args[2]
         changesets.append(changeset)
+
+    # Create the RB api client and retrieve the root resource.
+    api, root = get_api(REVIEWBOARD_URL, USERNAME, PASSWORD)
 
 
 if __name__ == '__main__':
