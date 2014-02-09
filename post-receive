@@ -80,9 +80,9 @@ def main():
     # We'll start by reading in the configuration for this hook...
     config = ConfigParser()
     config.readfp(open(CONFIG_FILE))
-    REVIEWBOARD_URL = config.get('RB', 'url')
-    USERNAME = config.get('RB', 'username')
-    PASSWORD = config.get('RB', 'password')
+    reviewboardUrl = config.get('RB', 'url')
+    username = config.get('RB', 'username')
+    password = config.get('RB', 'password')
     namedBranches = get_named_branches()
 
     # The "post-receive" script is run after receive-pack has accepted a pack
@@ -111,7 +111,7 @@ def main():
         changesets.append(changeset)
 
     # Create the RB api client and retrieve the root resource.
-    api, root = get_api(REVIEWBOARD_URL, USERNAME, PASSWORD)
+    api, root = get_api(reviewboardUrl, username, password)
 
 
 if __name__ == '__main__':
