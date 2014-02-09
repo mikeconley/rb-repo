@@ -218,7 +218,6 @@ def main():
     password = config.get('RB', 'password')
     named_branches = get_named_branches()
     repository_id = config.get('RB', 'repository_id')
-    namedBranches = get_named_branches()
 
     result = {}
     # The "post-receive" script is run after receive-pack has accepted a pack
