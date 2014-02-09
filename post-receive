@@ -76,6 +76,129 @@ def get_named_branch_for_rev(rev, namedBranches):
     return None
 
 
+def get_request_for_commit(root, ref):
+    """Retrieve the review request associated with a specific commit."""
+    requests = root.get_review_requests(commit_id=ref)
+    return (requests.total_results and requests[0]) or None
+
+
+def extract_summary(base, tip):
+    """Extracts the summary based on the provided revisions."""
+    return execute(
+        [
+            'git',
+            'log',
+            '--reverse',
+            '--pretty=format:%s',
+            '^%s' % base,
+            tip
+        ],
+        ignore_errors=True,
+        split_lines=True)[0].strip()
+
+
+def extract_description(base, tip):
+    """Extracts the description based on the provided revision range."""
+    return execute(
+        [
+            'git',
+            'log',
+            '--reverse',
+            '--pretty=format:%s%n%n%b',
+            '^%s' % base,
+            tip
+        ],
+        ignore_errors=True).strip()
+
+
+def post_reviews(root, repository_id, data):
+    requests = root.get_review_requests()
+    previous_change = None
+    review_requests = []
+
+    for change in data['changesets']:
+
+        base_commit = ((previous_change and previous_change['newrev']) or
+                       data['squashed']['parent'])
+
+        diff_content = generate_diff(change['newrev'], change['newrev'])
+        summary = extract_summary(change['newrev'], change['newrev'])
+        description = extract_description(change['newrev'], change['newrev'])
+
+        review_request_data = {
+            'summary': extract_summary(change['newrev'], change['newrev']),
+            'description': extract_description()
+        }
+
+        if change['oldrev'] and change['newrev']:
+            # We are updating the old commits review request
+            # with a new commit.
+            request = get_request_for_commit(root, change['oldrev'])
+        else:
+            # TODO: Don't just assume we will have a newrev in this case.
+            # in the future when we deal with commit reordering a deletion
+            # we'll want to discard review requests where the newrev is
+            # blank.
+
+            # TODO: We need to detect the user account of the push
+            # here and set `submit_as=<user>`.
+            request = requests.create(repository=repository_id)
+
+        diffs = request.get_diffs()
+        diff = diffs.create(diff_content, base_commit_id=base_commit)
+
+        draft = request.get_draft()
+        draft.update(
+            summary=summary,
+            description=description,
+            branch=data['base_branch'],
+            bugs_closed="TODO-BUG-HERE",
+            depends_on=(previous_change and previous_change['request']) or "",
+            public=True)
+
+
+        # We always keep track of the last change where we had a commit
+        # in the current push, so that we can set the following requests
+        # depends on field.
+        if change['newrev']:
+            previous_change = change
+            previous_change['request'] = request.id
+
+            review_request.append({
+                'summary': summary,
+                'id': request.id,
+            })
+
+    # Finally, we will compile the data for the "squashed" review request
+    # and post it.
+    summary = "Squashed Commits for %s" % data['push_branch']
+    description = []
+    for request in review_requests:
+        description.append("r/%s - %s" % (request['id'], request['summary']))
+
+    description = '\n'.join(description)
+    diff_content = generate_diff(data['squashed']['base'],
+                                 data['squashed']['head'])
+
+    request = get_request_for_commit(root, data['push_branch'])
+
+    if request is None:
+        request = requests.create(repository=repository_id)
+
+    diffs = request.get_diffs()
+    diff = diffs.create(diff_content,
+                        base_commit_id=data['squashed']['parent'])
+
+    draft = request.get_draft()
+    draft.update(
+        summary=summary,
+        description=description,
+        branch=data['base_branch'],
+        bugs_closed="TODO-BUG-HERE",
+        depends_on=(previous_change and previous_change['request']) or "",
+        public=True)
+
+
 def main():
     # We'll start by reading in the configuration for this hook...
     config = ConfigParser()
@@ -83,6 +206,7 @@ def main():
     reviewboardUrl = config.get('RB', 'url')
     username = config.get('RB', 'username')
     password = config.get('RB', 'password')
+    repository_id = config.get('RB', 'repository_id')
     namedBranches = get_named_branches()
 
     # The "post-receive" script is run after receive-pack has accepted a pack
