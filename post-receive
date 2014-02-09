@@ -11,11 +11,13 @@ import sys
 
 from ConfigParser import ConfigParser
 
-from rbtools.api.clients import RBClient
+from rbtools.api.client import RBClient
 from rbtools.utils.process import execute
 
+from gitcommititerator import GitCommitIterator
 
-CONFIG_FILE = 'config.cfg'
+
+CONFIG_FILE = os.path.join('hooks', 'config.cfg')
 
 
 def generate_diff(base_ref, tip_ref):
@@ -53,6 +55,27 @@ def get_api(server_url, username, password):
     return api_client, api_root
 
 
+def get_named_branches():
+    """Returns a list of hashes for named branches."""
+    cmdline = [
+        'git',
+        'show-ref',
+        '--hash',
+    ]
+    return [x.strip() for x in execute(cmdline, split_lines=True)]
+
+
+def get_named_branch_for_rev(rev, namedBranches):
+    """Given some commit rev, goes up the ancestry chain until
+       it finds a named branch.
+    """
+    iterator = GitCommitIterator(rev)
+    for rev in iterator:
+      if rev in namedBranches:
+        return rev
+    return None
+
+
 def main():
     # We'll start by reading in the configuration for this hook...
     config = ConfigParser()
@@ -60,6 +83,7 @@ def main():
     REVIEWBOARD_URL = config.get('RB', 'url')
     USERNAME = config.get('RB', 'username')
     PASSWORD = config.get('RB', 'password')
+    namedBranches = get_named_branches()
 
     # The "post-receive" script is run after receive-pack has accepted a pack
     # and the repository has been updated.  It is passed arguments in through
@@ -78,10 +102,13 @@ def main():
         changeset['oldrev'] = args[0]
         changeset['newrev'] = args[1]
         changeset['ref'] = args[2]
-        changesets.append(changeset)
 
-    # For each of these changesets, walk up their ancestry chain until we
-    # hit a named remote branch.
+        # For each of these changesets, walk up their ancestry chain until we
+        # hit a named remote branch.
+        changeset['named_branch'] = get_named_branch_for_rev(changeset['newrev'],
+                                                             namedBranches)
+
+        changesets.append(changeset)
 
     # Create the RB api client and retrieve the root resource.
     api, root = get_api(REVIEWBOARD_URL, USERNAME, PASSWORD)
