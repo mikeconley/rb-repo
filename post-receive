@@ -12,37 +12,11 @@ import sys
 from ConfigParser import ConfigParser
 
 from rbtools.api.clients import RBClient
+from rbtools.utils.process import execute
 
 
 CONFIG_FILE = 'config.cfg'
 
-
-def execute(command):
-    """Executes the specified command and returns the stdout output."""
-    if isinstance(command, list):
-        subprocess.list2cmdline(command)
-
-    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
-    return process.communicate()[0].strip()
-
-"""
-  The structure we're going to pass to the part that submits review requests
-  is as follows:
-
-  {
-    squashed: {
-      base: '(BASE SHA1)',
-      head: '(HEAD SHA1)'
-    },
-    changesets: [
-      {oldrev, newrev}, # Base
-      {oldrev, newrev}, # Some changeset
-      ...
-      {oldrev, newrev}, # Head
-    ],
-    push_branch: 'bugXXXXXX/c1'
-  }
-"""
 
 def generate_diff(base_ref, tip_ref):
     """Performs a diff on a particular ref range."""
@@ -71,7 +45,7 @@ def get_original_branch():
     pass
 
 
-def get_api(self, server_url, username, password):
+def get_api(server_url, username, password):
     """Returns an RBClient instance and the associated root resource."""
     api_client = RBClient(server_url, username=username, password=password)
     api_root = api_client.get_root()
