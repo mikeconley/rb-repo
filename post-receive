@@ -106,6 +106,9 @@ def main():
         changeset['ref'] = args[2]
         changesets.append(changeset)
 
+    # For each of these changesets, walk up their ancestry chain until we
+    # hit a named remote branch.
+
     # Create the RB api client and retrieve the root resource.
     api, root = get_api(REVIEWBOARD_URL, USERNAME, PASSWORD)
 
