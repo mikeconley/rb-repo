@@ -86,18 +86,6 @@ def get_parent_for_rev(rev):
     return rev.next()
 
 
-def get_head_rev():
-    """Returns the rev for HEAD."""
-    return execute(
-        [
-            'git',
-            'rev-parse',
-            'HEAD'
-        ],
-        ignore_errors=True,
-        split_lines=True)[0].strip()
-
-
 def get_request_for_commit(root, ref):
     """Retrieve the review request associated with a specific commit."""
     requests = root.get_review_requests(commit_id=ref)
@@ -243,35 +231,37 @@ def main():
     # these changesets as well, so we have to iterate the stdin lines.
     changesets = []
     push_branch = None
+    base_rev = None
+    new_revs = []
 
     for line in sys.stdin:
         args = line.strip().split(' ')
         changeset = {}
         changeset['oldrev'] = args[0]
         changeset['newrev'] = args[1]
+        new_revs.append(changeset['newrev'])
         if not push_branch:
             result['push_branch'] = args[2]
         changesets.append(changeset)
 
     result['changesets'] = changesets
 
-    # Grab a changeset, and walk up their ancestry chain until we
-    # hit a named remote branch. We'll use that for our "base_branch".
-    changeset = changesets[0]
-    base_rev, base_branch = get_named_branch_for_rev(changeset['newrev'], named_branches)
-    result['base_branch'] = base_branch
-
     # Finally, we need to provide the "squashed" part of the result,
     # which we'll use to fold all of the changesets together into a
     # single over-arching review request.
     result['squashed'] = {}
-    result['squashed']['head'] = get_head_rev()
-    result['squashed']['base'] = base_rev
+    result['squashed']['head'] = new_revs[0]
+    result['squashed']['base'] = new_revs[-1]
+
+    # Grab a changeset, and walk up their ancestry chain until we
+    # hit a named remote branch. We'll use that for our "base_branch".
+    changeset = changesets[0]
+    parent_rev, parent_branch = get_named_branch_for_rev(changeset['newrev'], named_branches)
+    result['squashed']['parent'] = parent_rev
 
     # Create the RB api client and retrieve the root resource.
-    #api, root = get_api(reviewboard_url, username, password)
-    print result
-
+    api, root = get_api(reviewboard_url, username, password)
+    post_reviews(root, repository_id, result)
 
 if __name__ == '__main__':
     main()
