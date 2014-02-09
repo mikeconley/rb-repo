@@ -60,9 +60,13 @@ def get_named_branches():
     cmdline = [
         'git',
         'show-ref',
-        '--hash',
     ]
-    return [x.strip() for x in execute(cmdline, split_lines=True)]
+    lines = [x.strip() for x in execute(cmdline, split_lines=True)]
+    result = {}
+    for line in lines:
+        splitted = line.split(' ')
+        result[splitted[0]] = splitted[1]
+    return result
 
 
 def get_named_branch_for_rev(rev, namedBranches):
@@ -72,19 +76,26 @@ def get_named_branch_for_rev(rev, namedBranches):
     iterator = GitCommitIterator(rev)
     for rev in iterator:
       if rev in namedBranches:
-        return rev
+        return namedBranches[rev]
     return None
+
+
+def get_parent_for_rev(rev):
+    """Return the rev for the parent of a commit."""
+    iterator = GitCommitIterator(rev)
+    return rev.next()
 
 
 def main():
     # We'll start by reading in the configuration for this hook...
     config = ConfigParser()
     config.readfp(open(CONFIG_FILE))
-    reviewboardUrl = config.get('RB', 'url')
+    reviewboard_url = config.get('RB', 'url')
     username = config.get('RB', 'username')
     password = config.get('RB', 'password')
-    namedBranches = get_named_branches()
+    named_branches = get_named_branches()
 
+    result = {}
     # The "post-receive" script is run after receive-pack has accepted a pack
     # and the repository has been updated.  It is passed arguments in through
     # stdin in the form
@@ -95,23 +106,26 @@ def main():
     # We need all three, so let's extract those. We might be getting several of
     # these changesets as well, so we have to iterate the stdin lines.
     changesets = []
+    push_branch = None
 
     for line in sys.stdin:
         args = line.strip().split(' ')
         changeset = {}
         changeset['oldrev'] = args[0]
         changeset['newrev'] = args[1]
-        changeset['ref'] = args[2]
-
-        # For each of these changesets, walk up their ancestry chain until we
-        # hit a named remote branch.
-        changeset['named_branch'] = get_named_branch_for_rev(changeset['newrev'],
-                                                             namedBranches)
-
+        if not push_branch:
+            result['push_branch'] = args[2]
         changesets.append(changeset)
 
+    result['changesets'] = changesets
+
+    # Grab a changeset, and walk up their ancestry chain until we
+    # hit a named remote branch.
+    changeset = changesets[0]
+    result['base_branch'] = get_named_branch_for_rev(changeset['newrev'], named_branches)
+
     # Create the RB api client and retrieve the root resource.
-    api, root = get_api(reviewboardUrl, username, password)
+    api, root = get_api(reviewboard_url, username, password)
 
 
 if __name__ == '__main__':
