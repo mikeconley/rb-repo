@@ -245,7 +245,7 @@ def main():
 
         # Let's walk the newrev chain first. We just need to walk up
         # the ancestry chain until we hit a named branch.
-        newrevs = []
+        newrevs = [newrev]
         newrev_iterator = GitCommitIterator(newrev)
         for rev in newrev_iterator:
             if rev in named_branches:
@@ -257,7 +257,7 @@ def main():
         # up the oldrev list with enough None's to match the newrev
         # list (because it's not possible for us to have created
         # review requests for them before).
-        oldrevs = []
+        oldrevs = [oldrev]
         if oldrev == EMPTY_REV:
             oldrevs = [None] * len(newrevs)
         else:
@@ -281,8 +281,8 @@ def main():
         # which we'll use to fold all of the changesets together into a
         # single over-arching review request.
         result['squashed'] = {
-          'head': newrevs[0],
-          'base': newrevs[-1],
+          'head': newrevs[-1],
+          'base': newrevs[0],
         }
 
         result['squashed']['parent'] = parent_rev
