@@ -102,8 +102,7 @@ def extract_summary(base, tip):
         'log',
         '--reverse',
         '--pretty=format:%s',
-        '%s^' % base,
-        tip
+        '%s^..%s' % (base, tip),
     ]
     return execute(cmdline,
                    split_lines=True)[0].strip()
@@ -117,8 +116,7 @@ def extract_description(base, tip):
             'log',
             '--reverse',
             '--pretty=format:%s%n%n%b',
-            '^%s' % base,
-            tip
+            '%s^..%s' % (base, tip),
         ],
         ignore_errors=True).strip()
 
@@ -163,7 +161,8 @@ def post_reviews(root, repository_id, data):
             branch=data['base_branch'],
             bugs_closed="TODO-BUG-HERE",
             depends_on=(previous_change and previous_change['request']) or "",
-            public=True)
+            public=True,
+            commit_id=change['newrev'])
 
 
         # We always keep track of the last change where we had a commit
@@ -205,7 +204,8 @@ def post_reviews(root, repository_id, data):
         branch=data['base_branch'],
         bugs_closed="TODO-BUG-HERE",
         depends_on=(previous_change and previous_change['request']) or "",
-        public=True)
+        public=True,
+        commit_id=data['push_branch'])
 
 
 def main():
