@@ -22,10 +22,7 @@ EMPTY_REV = '0000000000000000000000000000000000000000'
 
 def generate_diff(base_ref, tip_ref):
     """Performs a diff on a particular ref range."""
-    if base_ref == tip_ref:
-        rev_range = "%s^..%s" % (base_ref, tip_ref)
-    else:
-        rev_range = "%s..%s" % (base_ref, tip_ref)
+    rev_range = "%s^..%s" % (base_ref, tip_ref)
 
     cmdline = [
         "git",
@@ -273,7 +270,16 @@ def main():
         oldrevs.reverse()
         newrevs.reverse()
 
-        changesets = [{'oldrev': oldrevs[i], 'newrev': newrevs[i]} for i in range(len(newrevs))]
+        changesets = []
+        for i in range(len(newrevs)):
+            oldrev = None
+            if i < len(oldrevs):
+                oldrev = oldrevs[i]
+            changesets.append({
+                'oldrev': oldrev,
+                'newrev': newrevs[i],
+            })
+
         result['changesets'] = changesets
         result['push_branch'] = branch_name
 
