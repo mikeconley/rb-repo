@@ -1,4 +1,4 @@
 rb-repo
 =======
 
-Post-commit scripts to bridge DVCS's to Review Board in nice ways.
+Post-commit scripts that allow Review Board to be used as a changeset based code review tool.
