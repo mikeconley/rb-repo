@@ -18,12 +18,12 @@ from gitcommititerator import GitCommitIterator
 
 
 CONFIG_FILE = os.path.join('hooks', 'config.cfg')
-
+EMPTY_REV = '0000000000000000000000000000000000000000'
 
 def generate_diff(base_ref, tip_ref):
     """Performs a diff on a particular ref range."""
     if base_ref == tip_ref:
-        rev_range = "%s..%s^" % (base_ref, tip_ref)
+        rev_range = "%s^..%s" % (base_ref, tip_ref)
     else:
         rev_range = "%s..%s" % (base_ref, tip_ref)
 
@@ -59,13 +59,16 @@ def get_named_branches():
     """Returns a list of hashes for named branches."""
     cmdline = [
         'git',
-        'show-ref',
+        'branch',
+        '-r',
+        '--no-abbrev',
+        '-vv',
     ]
     lines = [x.strip() for x in execute(cmdline, split_lines=True)]
     result = {}
     for line in lines:
         splitted = line.split(' ')
-        result[splitted[0]] = splitted[1]
+        result[splitted[1]] = splitted[0]
     return result
 
 
@@ -94,17 +97,16 @@ def get_request_for_commit(root, ref):
 
 def extract_summary(base, tip):
     """Extracts the summary based on the provided revisions."""
-    return execute(
-        [
-            'git',
-            'log',
-            '--reverse',
-            '--pretty=format:%s',
-            '^%s' % base,
-            tip
-        ],
-        ignore_errors=True,
-        split_lines=True)[0].strip()
+    cmdline = [
+        'git',
+        'log',
+        '--reverse',
+        '--pretty=format:%s',
+        '%s^' % base,
+        tip
+    ]
+    return execute(cmdline,
+                   split_lines=True)[0].strip()
 
 
 def extract_description(base, tip):
@@ -126,6 +128,8 @@ def post_reviews(root, repository_id, data):
     previous_change = None
     review_requests = []
 
+    print data
+
     for change in data['changesets']:
 
         base_commit = ((previous_change and previous_change['newrev']) or
@@ -134,11 +138,6 @@ def post_reviews(root, repository_id, data):
         diff_content = generate_diff(change['newrev'], change['newrev'])
         summary = extract_summary(change['newrev'], change['newrev'])
         description = extract_description(change['newrev'], change['newrev'])
-
-        review_request_data = {
-            'summary': extract_summary(change['newrev'], change['newrev']),
-            'description': extract_description()
-        }
 
         if change['oldrev'] and change['newrev']:
             # We are updating the old commits review request
@@ -155,7 +154,7 @@ def post_reviews(root, repository_id, data):
             request = requests.create(repository=repository_id)
 
         diffs = request.get_diffs()
-        diff = diffs.create(diff_content, base_commit_id=base_commit)
+        diff = diffs.upload_diff(diff_content, base_commit_id=base_commit)
 
         draft = request.get_draft()
         draft.update(
@@ -174,7 +173,7 @@ def post_reviews(root, repository_id, data):
             previous_change = change
             previous_change['request'] = request.id
 
-            review_request.append({
+            review_requests.append({
                 'summary': summary,
                 'id': request.id,
             })
@@ -184,7 +183,7 @@ def post_reviews(root, repository_id, data):
     summary = "Squashed Commits for %s" % data['push_branch']
     description = []
     for request in review_requests:
-        description.append("r/%s - %s" % (request['id'], request['summary']))
+        description.append("/r/%s - %s" % (request['id'], request['summary']))
 
     description = '\n'.join(description)
     diff_content = generate_diff(data['squashed']['base'],
@@ -196,8 +195,8 @@ def post_reviews(root, repository_id, data):
         request = requests.create(repository=repository_id)
 
     diffs = request.get_diffs()
-    diff = diffs.create(diff_content,
-                        base_commit_id=data['squashed']['parent'])
+    diff = diffs.upload_diff(diff_content,
+                             base_commit_id=data['squashed']['parent'])
 
     draft = request.get_draft()
     draft.update(
@@ -228,40 +227,70 @@ def main():
     #  aa453216d1b3e49e7f6f98441fa56946ddcd6a20 68f7abf4e6f922807889f52bc043ecd31b79f814 refs/heads/master
     #
     # We need all three, so let's extract those. We might be getting several of
-    # these changesets as well, so we have to iterate the stdin lines.
+    # these as well, so we have to iterate the stdin lines.
+    #
+    # Each line represents a branch being pushed to. If we're receiving more than
+    # one, that means we're creating review requests for more than one pushed
+    # branch.
     changesets = []
     push_branch = None
     base_rev = None
-    new_revs = []
 
     for line in sys.stdin:
-        args = line.strip().split(' ')
-        changeset = {}
-        changeset['oldrev'] = args[0]
-        changeset['newrev'] = args[1]
-        new_revs.append(changeset['newrev'])
-        if not push_branch:
-            result['push_branch'] = args[2]
-        changesets.append(changeset)
+        branch_info = line.strip().split(' ')
+        oldrev = branch_info[0]
+        newrev = branch_info[1]
+        branch_name = branch_info[2]
+        parent_rev = None
 
-    result['changesets'] = changesets
+        # Let's walk the newrev chain first. We just need to walk up
+        # the ancestry chain until we hit a named branch.
+        newrevs = []
+        newrev_iterator = GitCommitIterator(newrev)
+        for rev in newrev_iterator:
+            if rev in named_branches:
+                parent_rev = rev
+                break
+            newrevs.append(rev)
 
-    # Finally, we need to provide the "squashed" part of the result,
-    # which we'll use to fold all of the changesets together into a
-    # single over-arching review request.
-    result['squashed'] = {}
-    result['squashed']['head'] = new_revs[0]
-    result['squashed']['base'] = new_revs[-1]
+        # If the oldrev is EMPTY_REV, then we just need to fill
+        # up the oldrev list with enough None's to match the newrev
+        # list (because it's not possible for us to have created
+        # review requests for them before).
+        oldrevs = []
+        if oldrev == EMPTY_REV:
+            oldrevs = [None] * len(newrevs)
+        else:
+            # Ok, we've created review requests for these revs before,
+            # so we need to include them...
+            for rev in GitCommitIterator(oldrev):
+                if rev in named_branches:
+                    break
+                oldrevs.append(rev)
 
-    # Grab a changeset, and walk up their ancestry chain until we
-    # hit a named remote branch. We'll use that for our "base_branch".
-    changeset = changesets[0]
-    parent_rev, parent_branch = get_named_branch_for_rev(changeset['newrev'], named_branches)
-    result['squashed']['parent'] = parent_rev
+        # post_reviews is expecting the oldrevs and newrevs list in
+        # newest to oldest order, so we need to reverse.
+        oldrevs.reverse()
+        newrevs.reverse()
 
-    # Create the RB api client and retrieve the root resource.
-    api, root = get_api(reviewboard_url, username, password)
-    post_reviews(root, repository_id, result)
+        changesets = [{'oldrev': oldrevs[i], 'newrev': newrevs[i]} for i in range(len(newrevs))]
+        result['changesets'] = changesets
+        result['push_branch'] = branch_name
+
+        # Finally, we need to provide the "squashed" part of the result,
+        # which we'll use to fold all of the changesets together into a
+        # single over-arching review request.
+        result['squashed'] = {
+          'head': newrevs[0],
+          'base': newrevs[-1],
+        }
+
+        result['squashed']['parent'] = parent_rev
+        result['base_branch'] = named_branches[parent_rev]
+
+        # Create the RB api client and retrieve the root resource.
+        api, root = get_api(reviewboard_url, username, password)
+        post_reviews(root, repository_id, result)
 
 if __name__ == '__main__':
     main()
