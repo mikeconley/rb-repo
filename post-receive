@@ -59,12 +59,13 @@ def get_named_branches():
         'branch',
         '-r',
         '--no-abbrev',
+        '--no-color',
         '-vv',
     ]
     lines = [x.strip() for x in execute(cmdline, split_lines=True)]
     result = {}
     for line in lines:
-        splitted = line.split(' ')
+        splitted = line.split()
         result[splitted[1]] = splitted[0]
     return result
 
